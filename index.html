@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<meta charset="utf-8">
+<style>
+  body {
+    font-family: Monospace;
+    margin: 0px;
+    overflow: hidden;
+  }
+  .controllers {
+    background-color: rgba(255, 255, 255, .75);
+    padding: 10px;    
+    position: absolute;
+    top: 10px;
+    z-index: 999;
+  }
+  .container {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+  }
+  ul {
+    list-style: none;
+    margin-bottom: 10px;
+    margin-left: 10px;
+    padding: 0px;
+  }
+  .right li {
+    margin-bottom: 10px;
+  }
+</style>
+
+<script src="three.min.js"></script>
+<script src="OrbitControls.js"></script>
+
+<div class="controllers left" style="left: 10px"></div>
+<div class="controllers right" style="right: 10px">
+  <ul>
+    <li><button onclick="controls.reset()">Recenter camera</button></li>
+    <li class="volume">Volume: 1%</li>
+    <li>
+      <input type="range" min="0" max="100" value="20" oninput="updateVolume(this.value)">
+    </li>
+</div>
+  
+<div class="container"></div>
+
+<script>
+const pointCount = 720;
+
+const geometry = new THREE.Geometry();
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const gainNode = audioCtx.createGain();
+gainNode.connect(audioCtx.destination);
+updateVolume(20);
+
+class Axis {
+  constructor(axis) {
+    const parent = document.createElement("ul");
+    document.querySelector(".controllers.left").appendChild(parent);
+    
+    const title = document.createElement("h3");
+    title.innerHTML = axis;
+    parent.appendChild(title);
+
+    this.freqText = document.createElement("li");
+    parent.appendChild(this.freqText);
+
+    const freqLine = document.createElement("li");
+    const freqInput = inputGen("range", 1, 20, Math.ceil(Math.random() * 10), 1);
+    parent.appendChild(freqLine.appendChild(freqInput));
+
+
+    this.ampText = document.createElement("li");
+    parent.appendChild(this.ampText);
+
+    const ampLine = document.createElement("li");
+    const ampInput = inputGen("range", 0, 100, 100, 0);
+    parent.appendChild(ampLine.appendChild(ampInput));
+
+
+    this.offsetText = document.createElement("li");
+    parent.appendChild(this.offsetText);
+
+    const phaseLine = document.createElement("li");
+    const phaseInput = inputGen("range", 0, .1, 0, .001);
+    parent.appendChild(phaseLine.appendChild(phaseInput));
+
+    const thisGainNode = audioCtx.createGain();
+    thisGainNode.connect(gainNode);
+
+    const thisOsc = audioCtx.createOscillator();
+    thisOsc.connect(thisGainNode);
+    thisOsc.frequency.value = 0;
+    thisOsc.start();
+
+    this.freqVal = function() {return +freqInput.value};
+    this.ampVal = function() {return +ampInput.value};
+    this.phaseVal = function() {return +phaseInput.value};
+    this.offset = 0;
+    this.gain = thisGainNode.gain;
+    this.osc = thisOsc.frequency;
+  }
+
+  getCoord(t) {
+    return Math.sin(this.freqVal() * t + this.offset) * this.ampVal();
+  }
+
+  update() {
+    this.offset += this.phaseVal();
+    this.osc.value = this.freqVal() * 100;
+    this.gain.value = this.ampVal() / 100;
+    
+    this.ampText.innerHTML = "Gain: " + this.ampVal() + "%";
+    this.freqText.innerHTML = "Frequency: " + this.freqVal() + "00Hz";
+    this.offsetText.innerHTML = "Phase speed: " + Math.round(this.phaseVal() * 1000);
+  }
+}
+
+const axes = ["X", "Y", "Z"].map(function(d, i) {return new Axis(d, i+1)});
+
+// create the scene
+const scene = new THREE.Scene();
+
+// create the camera
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 10000);
+camera.position.set(0, 0, 500);
+
+// create the ambient light and spot light
+const light = new THREE.SpotLight(0xffffff, 1.5);
+light.position.set(0, 1500, 0);
+light.castShadow = true;
+light.shadow = new THREE.LightShadow(new THREE.PerspectiveCamera(70, 1, 200, 2000));
+
+// create the plane for the shadows
+const planeGeometry = new THREE.PlaneGeometry(2000, 2000);
+planeGeometry.rotateX(-Math.PI / 2);
+
+const planeMaterial = new THREE.ShadowMaterial({opacity: 0.2});
+const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+plane.position.y = -200;
+plane.receiveShadow = true;
+
+// create the grid to help with orientation 
+const helper = new THREE.GridHelper( 2000, 100 );
+helper.position.y = - 199;
+helper.material.opacity = 0.25;
+helper.material.transparent = true;
+
+// add the above elements
+scene.add(camera)
+    .add(light)
+    .add(new THREE.AmbientLight(0xf0f0f0))
+    .add(plane)
+    .add(helper);
+
+
+const renderer = new THREE.WebGLRenderer();
+renderer.setClearColor(0xffffff);
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+
+document.querySelector(".container").appendChild(renderer.domElement);
+
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableKeys = false;
+
+const objs = [];
+
+loadPoints();
+
+function inputGen(type, min, max, value, step) {
+  const newInput = document.createElement("input");
+  newInput.type = type;
+  newInput.min = min;
+  newInput.max = max;
+  newInput.value = value;
+  newInput.step = step;
+  return newInput;
+}
+
+function loadPoints() {
+
+  for (let n=0; n<pointCount; n++) {
+    objs[n] = new THREE.Mesh(
+      new THREE.SphereGeometry(n === 0 ? 10 : 5), 
+      new THREE.MeshStandardMaterial({color: n === 0 ? 0x999999 : 0xff4444})
+      );
+    objs[n].castShadow = true;
+
+    scene.add(objs[n]);  
+  }  
+  animate();
+}
+
+
+function animate() {
+  requestAnimationFrame( animate );
+
+  for (let axis of axes) axis.update()
+
+  for (let i=0; i<pointCount; i++) {
+    const x = axes[0].getCoord(i);
+    const y = axes[1].getCoord(i);
+    const z = axes[2].getCoord(i);
+
+    objs[i].position.set(x, y, z);
+  }
+
+  renderer.render( scene, camera );
+}
+
+function updateVolume(val) {
+  document.querySelector(".volume").innerHTML = "Volume: " + val + "%";
+  gainNode.gain.value = val/1000;
+}
+</script>
+</html>
