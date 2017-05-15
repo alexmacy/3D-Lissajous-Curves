@@ -42,11 +42,14 @@
       <input type="range" min="0" max="100" value="20" oninput="updateVolume(this.value)">
     </li>
 </div>
-  
+
 <div class="container"></div>
 
 <script>
+
 const pointCount = 720;
+
+const geometry = new THREE.Geometry();
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const gainNode = audioCtx.createGain();
@@ -168,6 +171,13 @@ controls.enableKeys = false;
 
 const objs = [];
 
+var material = new THREE.LineBasicMaterial({ color: 0x555522 });
+var line = new THREE.Line(geometry, material);
+line.castShadow = true;
+
+scene.add(line);
+
+
 loadPoints();
 
 function inputGen(type, min, max, value, step) {
@@ -183,13 +193,7 @@ function inputGen(type, min, max, value, step) {
 function loadPoints() {
 
   for (let n=0; n<pointCount; n++) {
-    objs[n] = new THREE.Mesh(
-      new THREE.SphereGeometry(n === 0 ? 10 : 5), 
-      new THREE.MeshStandardMaterial({color: n === 0 ? 0x999999 : 0xff4444})
-      );
-    objs[n].castShadow = true;
-
-    scene.add(objs[n]);  
+    geometry.vertices.push(new THREE.Vector3(0, 0, 0));
   }  
   animate();
 }
@@ -201,14 +205,12 @@ function animate() {
   for (let axis of axes) axis.update()
 
   for (let i=0; i<pointCount; i++) {
-    const x = axes[0].getCoord(i);
-    const y = axes[1].getCoord(i);
-    const z = axes[2].getCoord(i);
-
-    objs[i].position.set(x, y, z);
+    geometry.vertices[i].x = axes[0].getCoord(i);
+    geometry.vertices[i].y = axes[1].getCoord(i);
+    geometry.vertices[i].z = axes[2].getCoord(i);
   }
-
-  renderer.render( scene, camera );
+  geometry.verticesNeedUpdate = true;
+  renderer.render(scene, camera);
 }
 
 function updateVolume(val) {
