@@ -7,43 +7,47 @@
     margin: 0px;
     overflow: hidden;
   }
-  .controllers {
-    background-color: rgba(255, 255, 255, .75);
-    padding: 10px;    
-    position: absolute;
-    top: 10px;
-    z-index: 999;
+  .controller-container {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
   }
-  .container {
+  .left, .right {
+    z-index: 9;
+  }
+  .controller {
+    background-color: rgba(255, 255, 255, .75);
+    box-shadow: 0px 0px 5px rgb(200, 200, 200);
+    margin: 10px;
+    padding: 10px;
+  }
+  button {
+    margin-top: 5px;
+  }
+  h3 {
+    margin-top: 0px;
+    margin-bottom: 10px;
+  }
+  .scene-container {
     position: absolute;
     left: 0px;
     top: 0px;
-  }
-  ul {
-    list-style: none;
-    margin-bottom: 10px;
-    margin-left: 10px;
-    padding: 0px;
-  }
-  .right li {
-    margin-bottom: 10px;
   }
 </style>
 
 <script src="three.min.js"></script>
 <script src="OrbitControls.js"></script>
 
-<div class="controllers left" style="left: 10px"></div>
-<div class="controllers right" style="right: 10px">
-  <ul>
-    <li><button onclick="controls.reset()">Recenter camera</button></li>
-    <li class="volume">Volume: 1%</li>
-    <li>
-      <input type="range" min="0" max="100" value="20" oninput="updateVolume(this.value)">
-    </li>
-</div>
-  
-<div class="container"></div>
+<div class="controller-container">
+  <div class="left"></div>
+  <div class="right controller">
+    <div class="volume">Volume: 1%</div>
+    <div><input type="range" min="0" max="100" value="20" oninput="updateVolume(this.value)"></div>
+    <button onclick="controls.reset()">Recenter camera</button>
+  </div>
+</div>  
+
+<div class="scene-container"></div>
 
 <script>
 const pointCount = 720;
@@ -55,35 +59,54 @@ updateVolume(20);
 
 class Axis {
   constructor(axis) {
-    const parent = document.createElement("ul");
-    document.querySelector(".controllers.left").appendChild(parent);
+    const self = this;
+    
+    const parent = document.createElement("div");
+    parent.className = "controller"
+    document.querySelector(".left").appendChild(parent);
     
     const title = document.createElement("h3");
-    title.innerHTML = axis;
+    title.innerHTML = axis + "-Axis";
     parent.appendChild(title);
 
-    this.freqText = document.createElement("li");
+    this.freqText = document.createElement("div");
     parent.appendChild(this.freqText);
 
-    const freqLine = document.createElement("li");
+    const freqLine = document.createElement("div");
     const freqInput = inputGen("range", 1, 20, Math.ceil(Math.random() * 10), 1);
-    parent.appendChild(freqLine.appendChild(freqInput));
+    freqLine.appendChild(freqInput)
+    parent.appendChild(freqLine);
 
 
-    this.ampText = document.createElement("li");
+    this.ampText = document.createElement("div");
     parent.appendChild(this.ampText);
 
-    const ampLine = document.createElement("li");
-    const ampInput = inputGen("range", 0, 100, 100, 0);
-    parent.appendChild(ampLine.appendChild(ampInput));
+    const ampLine = document.createElement("div");
+    const ampInput = inputGen("range", 0, 100, 100);
+    ampLine.appendChild(ampInput)
+    parent.appendChild(ampLine);
 
 
-    this.offsetText = document.createElement("li");
-    parent.appendChild(this.offsetText);
+    this.phaseRateText = document.createElement("div");
+    parent.appendChild(this.phaseRateText);
 
-    const phaseLine = document.createElement("li");
-    const phaseInput = inputGen("range", 0, .1, 0, .001);
-    parent.appendChild(phaseLine.appendChild(phaseInput));
+    const phaseRateLine = document.createElement("div");
+    this.phaseRateInput = inputGen("range", 0, 100, 0);
+    phaseRateLine.appendChild(this.phaseRateInput)
+    parent.appendChild(phaseRateLine);
+
+    this.phaseText = document.createElement("div");
+    parent.appendChild(this.phaseText);
+
+    const phaseResetLine = document.createElement("div");
+    this.phaseReset = document.createElement("button");
+    this.phaseReset.innerHTML = "Reset Phase";
+    this.phaseReset.onclick = function() {
+      resetPhase(self, self.phaseRateVal()/20 || 4);
+    }
+    phaseResetLine.appendChild(this.phaseReset)
+    parent.appendChild(phaseResetLine);
+
 
     const thisGainNode = audioCtx.createGain();
     thisGainNode.connect(gainNode);
@@ -95,80 +118,97 @@ class Axis {
 
     this.freqVal = function() {return +freqInput.value};
     this.ampVal = function() {return +ampInput.value};
-    this.phaseVal = function() {return +phaseInput.value};
+    this.phaseRateVal = function() {return +this.phaseRateInput.value};
     this.offset = 0;
     this.gain = thisGainNode.gain;
     this.osc = thisOsc.frequency;
   }
 
   getCoord(t) {
-    return Math.sin(this.freqVal() * t + this.offset) * this.ampVal();
+    return Math.sin(this.freqVal() * t + this.offset/360 * Math.PI * 2) * this.ampVal();
   }
 
   update() {
-    this.offset += this.phaseVal();
+    this.offset = (this.offset + this.phaseRateVal()/50) % 360;
     this.osc.value = this.freqVal() * 100;
     this.gain.value = this.ampVal() / 100;
-    
+
     this.ampText.innerHTML = "Gain: " + this.ampVal() + "%";
     this.freqText.innerHTML = "Frequency: " + this.freqVal() + "00Hz";
-    this.offsetText.innerHTML = "Phase speed: " + Math.round(this.phaseVal() * 1000);
+    this.phaseRateText.innerHTML = "Phase rate: " + this.phaseRateVal() + '%';
+    this.phaseText.innerHTML = "Phase: " + Math.round(this.offset) + "°";
   }
 }
 
-const axes = ["X", "Y", "Z"].map(function(d, i) {return new Axis(d, i+1)});
+function resetPhase(self, rate) {
+  if (rate < self.offset && self.offset <= 180) {  
+    self.offset -= rate;
+    requestAnimationFrame(function() {
+      resetPhase(self, rate)
+    })
+  } else if (360 - rate > self.offset && self.offset > 180) {  
+    self.offset += rate;
+    requestAnimationFrame(function() {
+      resetPhase(self, rate)
+    })
+  } else {
+    self.phaseRateInput.value = 0;
+    self.offset = 0;
+  }
+}
 
-// create the scene
-const scene = new THREE.Scene();
+// add three.js scene
+  const axes = ["X", "Y", "Z"].map(function(d, i) {
+    return new Axis(d, i+1)
+  });
 
-// create the camera
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 10000);
-camera.position.set(0, 0, 500);
+  // create the scene
+  const scene = new THREE.Scene();
 
-// create the ambient light and spot light
-const light = new THREE.SpotLight(0xffffff, 1.5);
-light.position.set(0, 1500, 0);
-light.castShadow = true;
-light.shadow = new THREE.LightShadow(new THREE.PerspectiveCamera(70, 1, 200, 2000));
+  // create the camera
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 10000);
+  camera.position.set(0, 0, 500);
 
-// create the plane for the shadows
-const planeGeometry = new THREE.PlaneGeometry(2000, 2000);
-planeGeometry.rotateX(-Math.PI / 2);
+  // create the ambient light and spot light
+  const light = new THREE.SpotLight(0xffffff, 1.5);
+  light.position.set(0, 1500, 0);
+  light.castShadow = true;
+  light.shadow = new THREE.LightShadow(new THREE.PerspectiveCamera(70, 1, 200, 2000));
 
-const planeMaterial = new THREE.ShadowMaterial({opacity: 0.2});
-const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-plane.position.y = -200;
-plane.receiveShadow = true;
+  // create the plane for the shadows
+  const planeGeometry = new THREE.PlaneGeometry(2000, 2000);
+  planeGeometry.rotateX(-Math.PI / 2);
 
-// create the grid to help with orientation 
-const helper = new THREE.GridHelper( 2000, 100 );
-helper.position.y = - 199;
-helper.material.opacity = 0.25;
-helper.material.transparent = true;
+  const planeMaterial = new THREE.ShadowMaterial({opacity: 0.2});
+  const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+  plane.position.y = -200;
+  plane.receiveShadow = true;
 
-// add the above elements
-scene.add(camera)
-    .add(light)
-    .add(new THREE.AmbientLight(0xf0f0f0))
-    .add(plane)
-    .add(helper);
+  // create the grid to help with orientation 
+  const helper = new THREE.GridHelper( 2000, 100 );
+  helper.position.y = - 199;
+  helper.material.opacity = 0.25;
+  helper.material.transparent = true;
 
-
-const renderer = new THREE.WebGLRenderer();
-renderer.setClearColor(0xffffff);
-renderer.setPixelRatio(devicePixelRatio);
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-
-document.querySelector(".container").appendChild(renderer.domElement);
+  // add the above elements
+  scene.add(camera)
+      .add(light)
+      .add(new THREE.AmbientLight(0xf0f0f0))
+      .add(plane)
+      .add(helper);
 
 
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.enableKeys = false;
+  const renderer = new THREE.WebGLRenderer();
+  renderer.setClearColor(0xffffff);
+  renderer.setPixelRatio(devicePixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
 
-const objs = [];
+  document.querySelector(".scene-container").appendChild(renderer.domElement);
 
-loadPoints();
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableKeys = false;
 
 function inputGen(type, min, max, value, step) {
   const newInput = document.createElement("input");
@@ -180,23 +220,28 @@ function inputGen(type, min, max, value, step) {
   return newInput;
 }
 
-function loadPoints() {
+// add the points
+  const objs = [];
 
-  for (let n=0; n<pointCount; n++) {
-    objs[n] = new THREE.Mesh(
-      new THREE.SphereGeometry(n === 0 ? 10 : 5), 
-      new THREE.MeshStandardMaterial({color: n === 0 ? 0x999999 : 0xff4444})
-      );
-    objs[n].castShadow = true;
+  loadPoints();
 
-    scene.add(objs[n]);  
-  }  
-  animate();
-}
+  function loadPoints() {
+
+    for (let n=0; n<pointCount; n++) {
+      objs[n] = new THREE.Mesh(
+        new THREE.SphereBufferGeometry(n === 0 ? 10 : 5, 16, 16), 
+        new THREE.MeshStandardMaterial({color: n === 0 ? 0x999999 : 0xff4444})
+        );
+      objs[n].castShadow = true;
+
+      scene.add(objs[n]);  
+    }  
+    animate();
+  }
 
 
 function animate() {
-  requestAnimationFrame( animate );
+  requestAnimationFrame(animate);
 
   for (let axis of axes) axis.update()
 
@@ -208,7 +253,7 @@ function animate() {
     objs[i].position.set(x, y, z);
   }
 
-  renderer.render( scene, camera );
+  renderer.render(scene, camera);
 }
 
 function updateVolume(val) {
